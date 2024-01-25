@@ -1,0 +1,598 @@
+<!-- views/rozkład.html -->
+<!DOCTYPE html>
+<html lang="pl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rozkład Jazdy</title>
+    <link rel="stylesheet" href="/public/style.css">
+    <style>
+        /* Dodatkowe style dla strony rozkład.html */
+        .main-content {
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .stop-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .stop-button {
+            padding: 10px;
+            background-color: #3498db;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .stop-button2 {
+            padding: 10px;
+            background-color: #db3434;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .schedule-table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+        }
+
+        .schedule-table th,
+        .schedule-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .schedule-table th {
+            background-color: #3498db;
+            color: #fff;
+        }
+
+        @media only screen and (max-width: 600px) {
+
+            /* Styl dla telefonów */
+            .stop-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+
+        .highlighted-time {
+            background-color: #3498db;
+            /* Kolor tła */
+            color: #fff;
+            /* Kolor tekstu */
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="menu-wrapper">
+            <!-- Ikonka menu -->
+            <div class="menu-toggle" id="menuToggle">
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+            </div>
+
+            <!-- Menu -->
+            <div class="menu-container" id="menuContainer">
+                <ul class="menu-list">
+                    <li><a href="/">Main Page</a></li>
+                    <li><a href="/">Account</a></li>
+                </ul>
+            </div>
+        </div>
+
+        <h1>Rozkład Jazdy - Linia 500</h1>
+    </header>
+
+    <div class="main-content">
+        <div class="stop-buttons">
+            <button class="stop-button" onclick="showSchedule('rokitki-bloki')">Rokitki Bloki</button>
+            <p>></p>
+            <button class="stop-button" onclick="showSchedule('centrum')">Rokitki Centrum</button>
+            <p>></p>
+            <button class="stop-button" onclick="showSchedule('ciepłownia')">Rokitki Ciepłownia</button>
+            <p>></p>
+            <button class="stop-button" onclick="showSchedule('sloneczna')">Rokitki Słoneczna</button>
+            <p>></p>
+            <button class="stop-button" onclick="showSchedule('molex')">Rokitki Molex</button>
+        </div>
+        <br><br>
+        <div class="stop-buttons">
+            <button class="stop-button2" onclick="showSchedule('rokitki-skarszewska-reverse')">Rokitki
+                Skarszewska-Pętla</button>
+            <p>></p>
+            <button class="stop-button2" onclick="showSchedule('słoneczna-reverse')">Rokitki Słoneczna</button>
+            <p>></p>
+            <button class="stop-button2" onclick="showSchedule('ciepłownia-reverse')">Rokitki Ciepłownia</button>
+            <p>></p>
+            <button class="stop-button2" onclick="showSchedule('dworzecPKP-reverse')">Rokitki, Dworzec PKP</button>
+            <p>></p>
+            <button class="stop-button2" onclick="showSchedule('rokitki-centrum-reverse')">Rokitki, Centrum</button>
+            <p>></p>
+            <button class="stop-button2" onclick="showSchedule('rokitki-bloki-reverse')">Rokitki, Bloki</button>
+        </div>
+        <div id="nextBusInfo"></div>
+        <div id="schedule-container"></div>
+    </div>
+
+    <footer>
+        <p>Pawiu &copy; 2024</p>
+    </footer>
+
+    <script>
+        function showSchedule(stop) {
+            const scheduleData = getScheduleData(stop);
+
+            // Wyświetl tabelkę z danymi rozkładu
+            const scheduleContainer = document.getElementById("schedule-container");
+            scheduleContainer.innerHTML = `
+                <h2>${stop} - Rozkład Jazdy</h2>
+                <table class="schedule-table">
+                    <thead>
+                        <tr>
+                            <th>Pn-Pt (oprócz świąt)</th>
+                            <th>Sobota</th>
+                            <th>Niedziela i Święta</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${scheduleData.map(entry => `<tr><td>${entry.tyg}</td><td>${entry.week}</td><td>${entry.el}</td></tr>`).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            showNextBusInfo(stop);
+            scrollToContent();
+        }
+
+        function scrollToContent() {
+            const windowHeight = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight;
+            const scrollPosition = windowHeight * 1;
+            window.scrollTo({ top: scrollPosition, behavior: "smooth" });
+        }
+
+
+        // Funkcja do wyświetlania informacji o najbliższym busie
+        function showNextBusInfo(stop) {
+            const scheduleData = getScheduleData(stop);
+            const now = new Date();
+            const currentDay = now.getDay();
+            const currentHour = now.getHours();
+            const currentMinutes = now.getMinutes();
+
+            function compareTime(timeString) {
+                const [hour, minutes] = timeString.split(':');
+                const busTime = new Date();
+                busTime.setHours(Number(hour), Number(minutes), 0);
+                return busTime;
+            }
+
+            let closestBusTime;
+
+            if (currentDay >= 1 && currentDay <= 5) {
+                closestBusTime = scheduleData.find(entry => compareTime(entry.tyg) > now);
+            } else if (currentDay === 6) {
+                closestBusTime = scheduleData.find(entry => compareTime(entry.week) > now);
+            } else if (currentDay === 0) {
+                closestBusTime = scheduleData.find(entry => compareTime(entry.el) > now);
+            }
+
+            if (closestBusTime) {
+                const timeDiff = Math.round((compareTime(closestBusTime.tyg) - now) / (1000 * 60));
+                const nextBusInfo = document.getElementById("nextBusInfo");
+                nextBusInfo.innerHTML = `<p>Najbliższy bus za ${timeDiff} minut</p>`;
+
+                // Zaznaczanie okienka w tabeli z najbliższym czasem
+                const scheduleTable = document.querySelector(".schedule-table");
+                scheduleTable.querySelectorAll("td").forEach(cell => {
+                    const cellTime = compareTime(cell.innerText);
+                    if (cellTime.getHours() === compareTime(closestBusTime.tyg).getHours() &&
+                        cellTime.getMinutes() === compareTime(closestBusTime.tyg).getMinutes()) {
+                        cell.classList.add("highlighted-time");
+                    } else {
+                        cell.classList.remove("highlighted-time");
+                    }
+                });
+            } else {
+                const nextBusInfo = document.getElementById("nextBusInfo");
+                nextBusInfo.innerHTML = `<p>Brak dostępnych połączeń na dziś</p>`;
+            }
+        }
+
+
+        function getScheduleData(stop) {
+            //dodać 7 -> odjazdy
+            if (stop === 'rokitki-bloki') {
+                return [
+                    { tyg: "5:20", week: "5:20", el: "5:20" },
+                    { tyg: "5:50", week: "", el: "" },
+                    { tyg: "6:05", week: "6:05", el: "6:05" },
+                    { tyg: "6:30", week: "", el: "" },
+                    { tyg: "6:55", week: "7:15", el: "7:15" },
+                    { tyg: "7:25", week: "", el: "" },
+                    { tyg: "7:55", week: "8:15", el: "8:15" },
+                    { tyg: "8:25", week: "", el: "" },
+                    { tyg: "8:55", week: "8:55", el: "9:15" },
+                    { tyg: "9:35", week: "9:35", el: "" },
+                    { tyg: "10:15", week: "10:15", el: "10:15" },
+                    { tyg: "10:55", week: "10:55", el: "" },
+                    { tyg: "11:35", week: "11:35", el: "11:15" },
+                    { tyg: "12:15", week: "12:15", el: "12:15" },
+                    { tyg: "12:55", week: "12:55", el: "" },
+                    { tyg: "13:30", week: "13:35", el: "13:15" },
+                    { tyg: "14:05", week: "14:15", el: "14:15" },
+                    { tyg: "14:25", week: "", el: "" },
+                    { tyg: "14:55", week: "", el: "" },
+                    { tyg: "15:25", week: "15:15", el: "15:15" },
+                    { tyg: "15:55", week: "", el: "" },
+                    { tyg: "16:20", week: "16:15", el: "16:15" },
+                    { tyg: "16:40", week: "", el: "" },
+                    { tyg: "16:55", week: "", el: "" },
+                    { tyg: "17:30", week: "17:25", el: "17:25" },
+                    { tyg: "18:05", week: "18:15", el: "18:15" },
+                    { tyg: "19:15", week: "19:15", el: "19:15" },
+                    { tyg: "20:15", week: "20:15", el: "20:15" },
+                    { tyg: "21:25", week: "21:25", el: "21:25" },
+                    { tyg: "22:05", week: "22:05", el: "22:05" },
+                ];
+            } else if (stop === 'centrum') {
+                return [
+                    { tyg: "5:21", week: "5:21", el: "5:21" },
+                    { tyg: "5:51", week: "", el: "" },
+                    { tyg: "6:06", week: "6:06", el: "6:06" },
+                    { tyg: "6:31", week: "", el: "" },
+                    { tyg: "6:56", week: "", el: "" },
+                    { tyg: "7:26", week: "7:16", el: "7:16" },
+                    { tyg: "7:56", week: "8:16", el: "8:16" },
+                    { tyg: "8:26", week: "", el: "" },
+                    { tyg: "8:56", week: "8:56", el: "9:16" },
+                    { tyg: "9:36", week: "9:36", el: "" },
+                    { tyg: "10:16", week: "10:16", el: "10:16" },
+                    { tyg: "10:56", week: "10:56", el: "" },
+                    { tyg: "11:36", week: "11:36", el: "11:16" },
+                    { tyg: "12:16", week: "12:16", el: "12:16" },
+                    { tyg: "12:56", week: "12:56", el: "13:16" },
+                    { tyg: "13:31", week: "13:36", el: "" },
+                    { tyg: "14:06", week: "", el: "14:16" },
+                    { tyg: "14:26", week: "14:16", el: "" },
+                    { tyg: "14:56", week: "", el: "" },
+                    { tyg: "15:26", week: "15:16", el: "15:16" },
+                    { tyg: "15:56", week: "", el: "" },
+                    { tyg: "16:21", week: "16:16", el: "16:16" },
+                    { tyg: "16:41", week: "", el: "" },
+                    { tyg: "16:56", week: "", el: "" },
+                    { tyg: "17:31", week: "17:26", el: "17:26" },
+                    { tyg: "18:06", week: "18:16", el: "18:16" },
+                    { tyg: "19:16", week: "19:16", el: "19:16" },
+                    { tyg: "20:16", week: "20:16", el: "20:16" },
+                    { tyg: "21:26", week: "21:26", el: "21:26" },
+                    { tyg: "22:06", week: "22:06", el: "22:06" },
+                ];
+            } else if (stop === 'ciepłownia') {
+                return [
+                    { tyg: "5:23", week: "5:23", el: "5:23" },
+                    { tyg: "5:53", week: "", el: "" },
+                    { tyg: "6:08", week: "6:08", el: "6:08" },
+                    { tyg: "6:33", week: "", el: "" },
+                    { tyg: "6:58", week: "7:18", el: "7:18" },
+                    { tyg: "7:28", week: "", el: "" },
+                    { tyg: "7:58", week: "", el: "" },
+                    { tyg: "8:28", week: "8:18", el: "8:18" },
+                    { tyg: "8:58", week: "8:58", el: "9:18" },
+                    { tyg: "9:38", week: "9:38", el: "" },
+                    { tyg: "10:18", week: "10:18", el: "10:18" },
+                    { tyg: "10:58", week: "10:58", el: "" },
+                    { tyg: "11:38", week: "11:38", el: "11:18" },
+                    { tyg: "12:18", week: "12:18", el: "12:18" },
+                    { tyg: "12:58", week: "12:59", el: "13:18" },
+                    { tyg: "13:33", week: "13:38", el: "" },
+                    { tyg: "14:08", week: "", el: "14:18" },
+                    { tyg: "14:28", week: "14:18", el: "" },
+                    { tyg: "14:58", week: "", el: "" },
+                    { tyg: "15:28", week: "15:18", el: "15:18" },
+                    { tyg: "15:58", week: "", el: "" },
+                    { tyg: "16:23", week: "16:18", el: "16:18" },
+                    { tyg: "16:43", week: "", el: "" },
+                    { tyg: "16:58", week: "", el: "" },
+                    { tyg: "17:33", week: "17:28", el: "17:28" },
+                    { tyg: "18:08", week: "18:18", el: "18:18" },
+                    { tyg: "19:18", week: "19:18", el: "19:18" },
+                    { tyg: "20:18", week: "20:18", el: "20:18" },
+                    { tyg: "21:28", week: "21:28", el: "21:28" },
+                    { tyg: "22:08", week: "22:09", el: "22:08" },
+                ];
+            } else if (stop === "sloneczna") {
+                return [
+                    { tyg: "5:24", week: "5:24", el: "5:24" },
+                    { tyg: "5:54", week: "", el: "" },
+                    { tyg: "6:09", week: "6:09", el: "6:09" },
+                    { tyg: "6:34", week: "", el: "" },
+                    { tyg: "6:59", week: "", el: "" },
+                    { tyg: "7:29", week: "7:19", el: "7:19" },
+                    { tyg: "7:59", week: "", el: "" },
+                    { tyg: "8:29", week: "8:19", el: "8:19" },
+                    { tyg: "8:59", week: "8:59", el: "" },
+                    { tyg: "9:39", week: "9:39", el: "9:19" },
+                    { tyg: "10:19", week: "10:19", el: "10:19" },
+                    { tyg: "10:59", week: "10:59", el: "" },
+                    { tyg: "11:39", week: "11:39", el: "11:19" },
+                    { tyg: "12:19", week: "12:19", el: "12:19" },
+                    { tyg: "12:59", week: "12:59", el: "" },
+                    { tyg: "13:34", week: "13:39", el: "13:19" },
+                    { tyg: "14:09", week: "", el: "" },
+                    { tyg: "14:29", week: "14:19", el: "14:19" },
+                    { tyg: "14:59", week: "", el: "" },
+                    { tyg: "15:29", week: "15:19", el: "15:19" },
+                    { tyg: "15:59", week: "", el: "" },
+                    { tyg: "16:24", week: "16:19", el: "16:19" },
+                    { tyg: "16:44", week: "", el: "" },
+                    { tyg: "16:59", week: "", el: "" },
+                    { tyg: "17:34", week: "17:29", el: "17:29" },
+                    { tyg: "18:09", week: "18:19", el: "18:19" },
+                    { tyg: "19:19", week: "19:19", el: "19:19" },
+                    { tyg: "20:19", week: "20:19", el: "20:19" },
+                    { tyg: "21:29", week: "21:29", el: "21:29" },
+                    { tyg: "22:09", week: "22:09", el: "22:09" },
+                ]
+            } else if (stop === "molex") {
+                return [
+                    { tyg: "5:25", week: "5:25", el: "5:25" },
+                    { tyg: "5:55", week: "", el: "" },
+                    { tyg: "6:10", week: "6:10", el: "6:10" },
+                    { tyg: "6:35", week: "", el: "" },
+                    { tyg: "7:00", week: "", el: "" },
+                    { tyg: "7:30", week: "7:20", el: "7:20" },
+                    { tyg: "8:00", week: "", el: "" },
+                    { tyg: "8:30", week: "8:20", el: "8:20" },
+                    { tyg: "9:00", week: "9:00", el: "" },
+                    { tyg: "9:40", week: "9:40", el: "9:20" },
+                    { tyg: "10:20", week: "10:20", el: "10:20" },
+                    { tyg: "11:00", week: "11:00", el: "11:20" },
+                    { tyg: "11:40", week: "11:40", el: "" },
+                    { tyg: "12:20", week: "12:20", el: "12:20" },
+                    { tyg: "13:00", week: "13:00", el: "" },
+                    { tyg: "13:35", week: "13:40", el: "13:20" },
+                    { tyg: "14:10", week: "14:20", el: "14:20" },
+                    { tyg: "14:30", week: "", el: "" },
+                    { tyg: "15:00", week: "", el: "" },
+                    { tyg: "15:30", week: "15:20", el: "15:20" },
+                    { tyg: "16:00", week: "", el: "" },
+                    { tyg: "16:25", week: "16:20", el: "16:20" },
+                    { tyg: "16:45", week: "", el: "" },
+                    { tyg: "17:00", week: "", el: "" },
+                    { tyg: "17:35", week: "17:30", el: "17:30" },
+                    { tyg: "18:10", week: "18:20", el: "18:20" },
+                    { tyg: "19:20", week: "19:20", el: "19:20" },
+                    { tyg: "20:20", week: "20:20", el: "20:20" },
+                    { tyg: "21:30", week: "21:30", el: "21:30" },
+                    { tyg: "22:10", week: "22:10", el: "22:10" },
+                ];
+            } else if (stop === "rokitki-skarszewska-reverse") {
+                return [
+                    { tyg: "5:40", week: "5:40", el: "5:40" },
+                    { tyg: "6:00", week: "", el: "" },
+                    { tyg: "6:25", week: "6:35", el: "6:35" },
+                    { tyg: "6:45", week: "", el: "" },
+                    { tyg: "7:15", week: "", el: "" },
+                    { tyg: "7:45", week: "7:35", el: "7:35" },
+                    { tyg: "8:15", week: "", el: "" },
+                    { tyg: "8:45", week: "8:35", el: "8:35" },
+                    { tyg: "9:15", week: "9:15", el: "" },
+                    { tyg: "9:55", week: "9:55", el: "" },
+                    { tyg: "10:35", week: "10:35", el: "10:35" },
+                    { tyg: "11:15", week: "11:15", el: "" },
+                    { tyg: "11:55", week: "11:55", el: "11:35" },
+                    { tyg: "12:35", week: "12:35", el: "12:35" },
+                    { tyg: "13:15", week: "13:15", el: "" },
+                    { tyg: "13:50", week: "13:55", el: "13:35" },
+                    { tyg: "14:20", week: "", el: "" },
+                    { tyg: "14:45", week: "14:35", el: "14:35" },
+                    { tyg: "15:15", week: "", el: "" },
+                    { tyg: "15:45", week: "15:35", el: "15:35" },
+                    { tyg: "16:10", week: "", el: "" },
+                    { tyg: "16:30", week: "16:35", el: "16:35" },
+                    { tyg: "16:45", week: "", el: "" },
+                    { tyg: "17:10", week: "", el: "" },
+                    { tyg: "17:45", week: "17:40", el: "17:40" },
+                    { tyg: "18:25", week: "18:35", el: "18:35" },
+                    { tyg: "19:35", week: "19:35", el: "19:35" },
+                    { tyg: "20:40", week: "20:40", el: "20:40" },
+                    { tyg: "21:40", week: "21:45", el: "21:45" },
+                    { tyg: "22:20", week: "22:20", el: "22:20" },
+                ];
+            } else if (stop === "słoneczna-reverse") {
+                return [
+                    { tyg: "5:41", week: "5:41", el: "5:41" },
+                    { tyg: "6:01", week: "", el: "" },
+                    { tyg: "6:26", week: "6:35", el: "6:36" },
+                    { tyg: "6:46", week: "", el: "" },
+                    { tyg: "7:16", week: "", el: "" },
+                    { tyg: "7:46", week: "7:36", el: "7:36" },
+                    { tyg: "8:16", week: "", el: "" },
+                    { tyg: "8:46", week: "8:36", el: "8:36" },
+                    { tyg: "9:16", week: "9:16", el: "" },
+                    { tyg: "9:36", week: "9:56", el: "9:36" },
+                    { tyg: "10:36", week: "10:36", el: "10:36" },
+                    { tyg: "11:16", week: "11:16", el: "11:36" },
+                    { tyg: "11:56", week: "11:56", el: "" },
+                    { tyg: "12:36", week: "12:36", el: "12:36" },
+                    { tyg: "13:16", week: "13:15", el: "" },
+                    { tyg: "13:51", week: "13:56", el: "13:36" },
+                    { tyg: "14:21", week: "", el: "" },
+                    { tyg: "14:46", week: "14:36", el: "14:36" },
+                    { tyg: "15:16", week: "", el: "" },
+                    { tyg: "15:46", week: "15:36", el: "15:36" },
+                    { tyg: "16:11", week: "", el: "" },
+                    { tyg: "16:31", week: "16:36", el: "16:36" },
+                    { tyg: "16:46", week: "", el: "" },
+                    { tyg: "17:11", week: "", el: "" },
+                    { tyg: "17:46", week: "17:41", el: "17:41" },
+                    { tyg: "18:26", week: "18:36", el: "18:36" },
+                    { tyg: "19:36", week: "19:36", el: "19:36" },
+                    { tyg: "20:41", week: "20:41", el: "20:41" },
+                    { tyg: "21:41", week: "21:46", el: "21:46" },
+                    { tyg: "22:20", week: "22:20", el: "22:21" },
+                ];
+            } else if (stop === "ciepłownia-reverse") {
+                return [
+                    { tyg: "5:42", week: "5:42", el: "5:42" },
+                    { tyg: "6:02", week: "", el: "" },
+                    { tyg: "6:27", week: "6:37", el: "6:37" },
+                    { tyg: "6:47", week: "", el: "" },
+                    { tyg: "7:17", week: "", el: "" },
+                    { tyg: "7:47", week: "7:37", el: "7:37" },
+                    { tyg: "8:17", week: "", el: "" },
+                    { tyg: "8:47", week: "8:37", el: "8:37" },
+                    { tyg: "9:17", week: "9:17", el: "" },
+                    { tyg: "9:57", week: "9:57", el: "9:37" },
+                    { tyg: "10:37", week: "10:37", el: "10:37" },
+                    { tyg: "11:17", week: "11:17", el: "" },
+                    { tyg: "11:57", week: "11:57", el: "11:37" },
+                    { tyg: "12:37", week: "12:37", el: "12:37" },
+                    { tyg: "13:17", week: "13:17", el: "" },
+                    { tyg: "13:52", week: "13:57", el: "13:37" },
+                    { tyg: "14:22", week: "", el: "" },
+                    { tyg: "14:47", week: "14:37", el: "14:37" },
+                    { tyg: "15:17", week: "", el: "" },
+                    { tyg: "15:42", week: "15:37", el: "15:37" },
+                    { tyg: "16:12", week: "", el: "" },
+                    { tyg: "16:32", week: "", el: "" },
+                    { tyg: "16:47", week: "16:37", el: "16:37" },
+                    { tyg: "17:12", week: "", el: "" },
+                    { tyg: "17:47", week: "17:42", el: "17:42" },
+                    { tyg: "18:27", week: "18:37", el: "18:37" },
+                    { tyg: "19:37", week: "19:37", el: "19:37" },
+                    { tyg: "20:42", week: "20:42", el: "20:42" },
+                    { tyg: "21:42", week: "21:47", el: "21:47" },
+                    { tyg: "22:22", week: "22:22", el: "22:22" },
+                ];
+            } else if (stop === "dworzecPKP-reverse") {
+                return [
+                    { tyg: "5:43", week: "5:43", el: "5:43" },
+                    { tyg: "6:03", week: "", el: "" },
+                    { tyg: "6:28", week: "6:38", el: "6:38" },
+                    { tyg: "6:48", week: "", el: "" },
+                    { tyg: "7:18", week: "", el: "" },
+                    { tyg: "7:48", week: "7:38", el: "7:38" },
+                    { tyg: "8:18", week: "", el: "" },
+                    { tyg: "8:48", week: "8:38", el: "8:38" },
+                    { tyg: "9:18", week: "9:18", el: "9:38" },
+                    { tyg: "9:58", week: "9:58", el: "" },
+                    { tyg: "10:38", week: "10:38", el: "10:38" },
+                    { tyg: "11:18", week: "11:18", el: "11:30" },
+                    { tyg: "11:58", week: "11:58", el: "" },
+                    { tyg: "12:38", week: "12:38", el: "12:38" },
+                    { tyg: "13:18", week: "13:18", el: "13:38" },
+                    { tyg: "13:53", week: "13:58", el: "" },
+                    { tyg: "14:23", week: "", el: "" },
+                    { tyg: "14:48", week: "14:38", el: "14:38" },
+                    { tyg: "15:17", week: "", el: "" },
+                    { tyg: "15:47", week: "15:38", el: "15:38" },
+                    { tyg: "16:13", week: "", el: "" },
+                    { tyg: "16:33", week: "16:38", el: "16:38" },
+                    { tyg: "16:48", week: "", el: "" },
+                    { tyg: "17:13", week: "", el: "" },
+                    { tyg: "17:48", week: "17:43", el: "17:43" },
+                    { tyg: "18:28", week: "18:38", el: "18:38" },
+                    { tyg: "19:38", week: "19:38", el: "19:38" },
+                    { tyg: "20:43", week: "20:43", el: "20:43" },
+                    { tyg: "21:43", week: "21:48", el: "21:48" },
+                    { tyg: "22:22", week: "22:23", el: "22:23" },
+                ];
+            } else if (stop === "rokitki-centrum-reverse") {
+                return [
+                    { tyg: "5:44", week: "5:44", el: "5:44" },
+                    { tyg: "6:04", week: "", el: "" },
+                    { tyg: "6:29", week: "", el: "" },
+                    { tyg: "6:49", week: "6:39", el: "6:39" },
+                    { tyg: "7:19", week: "", el: "" },
+                    { tyg: "7:49", week: "7:39", el: "7:39" },
+                    { tyg: "8:19", week: "", el: "" },
+                    { tyg: "8:49", week: "8:39", el: "8:39" },
+                    { tyg: "9:19", week: "9:19", el: "9:39" },
+                    { tyg: "9:59", week: "9:59", el: "" },
+                    { tyg: "10:39", week: "10:39", el: "10;39" },
+                    { tyg: "11:19", week: "11:19", el: "" },
+                    { tyg: "11:59", week: "11:59", el: "11:39" },
+                    { tyg: "12:39", week: "12:39", el: "12:39" },
+                    { tyg: "13:19", week: "13:19", el: "" },
+                    { tyg: "13:54", week: "13:59", el: "13:39" },
+                    { tyg: "14:24", week: "", el: "" },
+                    { tyg: "14:49", week: "14:39", el: "14:39" },
+                    { tyg: "15:19", week: "", el: "" },
+                    { tyg: "15:49", week: "15:39", el: "15:39" },
+                    { tyg: "16:14", week: "", el: "" },
+                    { tyg: "16:34", week: "", el: "" },
+                    { tyg: "16:49", week: "16:39", el: "16:39" },
+                    { tyg: "17:14", week: "", el: "" },
+                    { tyg: "17:49", week: "17:44", el: "17:44" },
+                    { tyg: "18:29", week: "18:39", el: "18:39" },
+                    { tyg: "19:39", week: "19:39", el: "19:39" },
+                    { tyg: "20:44", week: "20:44", el: "20:44" },
+                    { tyg: "21:44", week: "21:49", el: "21:49" },
+                    { tyg: "22:24", week: "22:24", el: "22:24" },
+                ];
+            } else if (stop === "rokitki-bloki-reverse") {
+                return [
+                    { tyg: "5:45", week: "5:45", el: "5:45" },
+                    { tyg: "6:05", week: "", el: "" },
+                    { tyg: "6:30", week: "6:40", el: "6:40" },
+                    { tyg: "6:50", week: "", el: "" },
+                    { tyg: "7:20", week: "", el: "" },
+                    { tyg: "7:50", week: "7:40", el: "7:40" },
+                    { tyg: "8:20", week: "", el: "" },
+                    { tyg: "8:50", week: "8:40", el: "8:40" },
+                    { tyg: "9:20", week: "9:20", el: "9:40" },
+                    { tyg: "10:00", week: "10:00", el: "" },
+                    { tyg: "10:40", week: "10:40", el: "10:40" },
+                    { tyg: "11:20", week: "11:20", el: "11:40" },
+                    { tyg: "12:00", week: "12:00", el: "" },
+                    { tyg: "12:40", week: "12:40", el: "12:40" },
+                    { tyg: "13:20", week: "13:20", el: "" },
+                    { tyg: "13:55", week: "", el: "13:40" },
+                    { tyg: "14:25", week: "14:00", el: "" },
+                    { tyg: "14:50", week: "14:40", el: "14:40" },
+                    { tyg: "15:20", week: "", el: "" },
+                    { tyg: "15:50", week: "15:40", el: "15:40" },
+                    { tyg: "16:15", week: "", el: "" },
+                    { tyg: "16:35", week: "16:40", el: "16:40" },
+                    { tyg: "16:50", week: "", el: "" },
+                    { tyg: "17:15", week: "", el: "17:45" },
+                    { tyg: "17:50", week: "17:45", el: "" },
+                    { tyg: "18:30", week: "18:40", el: "18:40" },
+                    { tyg: "19:40", week: "19:40", el: "19:40" },
+                    { tyg: "20:45", week: "20:45", el: "20:45" },
+                    { tyg: "21:45", week: "21:50", el: "21:50" },
+                    { tyg: "22:25", week: "22:25", el: "22:25" },
+                ];
+            } else {
+                return [];
+            }
+        }
+
+        // Kod do obsługi menu, jeśli jest potrzebny
+        document.addEventListener('DOMContentLoaded', () => {
+            const menuToggle = document.querySelector('.menu-toggle');
+            const header = document.querySelector('header');
+
+            menuToggle.addEventListener('click', () => {
+                header.classList.toggle('menu-open');
+            });
+        });
+    </script>
+</body>
+
+</html>
